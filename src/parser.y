@@ -113,8 +113,7 @@ allowed_char_for_token:
 t_token_char; |
 t_digit {
 	$$ = '0' + $1;
-}; |
-t_dot;
+}; 
 
 /*
  * Rule 2: A token is a sequence of all allowed token chars.
