@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
 
     addr.sin_family = AF_INET;
     // addr.sin_port = htons(ECHO_PORT);
-    addr.sin_port = port;
+    addr.sin_port = htons(port);
     addr.sin_addr.s_addr = INADDR_ANY;
 
     int optval = 1;
