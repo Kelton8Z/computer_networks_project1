@@ -18,6 +18,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define ECHO_PORT 9999
 #define BUF_SIZE 4096
@@ -40,7 +41,10 @@ int main(int argc, char* argv[])
     struct sockaddr_in addr, cli_addr;
     char buf[BUF_SIZE];
 
+    int port = atoi(argv[1]);
+
     fprintf(stdout, "----- Echo Server -----\n");
+    printf("%d\n", port);
     
     /* all networked programs must create a socket */
     if ((sock = socket(PF_INET, SOCK_STREAM, 0)) == -1)
@@ -50,11 +54,16 @@ int main(int argc, char* argv[])
     }
 
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(ECHO_PORT);
+    // addr.sin_port = htons(ECHO_PORT);
+    addr.sin_port = port;
     addr.sin_addr.s_addr = INADDR_ANY;
 
+    int optval = 1;
+    int optlen = sizeof(optval);
+    setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&optval, optlen);
+
     /* servers bind sockets to ports---notify the OS they accept connections */
-    if (bind(sock, (struct sockaddr *) &addr, sizeof(addr)))
+    if (bind(sock, (struct sockaddr *) &addr, sizeof(addr))==-1)
     {
         close_socket(sock);
         fprintf(stderr, "Failed binding socket.\n");
@@ -69,10 +78,20 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    struct timeval tv;
+    tv.tv_sec = 5;
+    tv.tv_usec = 0;
+    fd_set readfds;
+     
+
     /* finally, loop waiting for input and then write it back */
     while (1)
     {
         cli_size = sizeof(cli_addr);
+        // if (select(1001, &sock, NULL, NULL, &tv) < 0){
+        //     perror("select error");
+        //     return EXIT_FAILURE;
+        // };
         if ((client_sock = accept(sock, (struct sockaddr *) &cli_addr,
                                     &cli_size)) == -1)
         {
