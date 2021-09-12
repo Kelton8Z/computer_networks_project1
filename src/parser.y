@@ -210,6 +210,12 @@ request_header: token ows t_colon ows text ows t_crlf {
 	parsing_request->header_count++;
 };
 
+multiple_headers: request_header multiple_headers{
+	YPRINTF("multiple_headers:\n%s\n%s\n",$1,$5);
+    strcpy(parsing_request->headers[parsing_request->header_count].header_name, $1);
+	strcpy(parsing_request->headers[parsing_request->header_count].header_value, $5);
+	parsing_request->header_count++;
+};
 
 /*
  * You need to fill this rule, and you are done! You have all the assembly
@@ -217,7 +223,7 @@ request_header: token ows t_colon ows text ows t_crlf {
  * All the best!
  *
  */
-request: request_line request_header t_crlf{
+request: request_line multiple_headers t_crlf{
 	YPRINTF("parsing_request: Matched Success.\n");
 	return SUCCESS;
 };
