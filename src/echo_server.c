@@ -64,6 +64,7 @@ int main(int argc, char* argv[])
     int optlen = sizeof(optval);
     setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, (const char*)&optval, optlen);
 
+    printf("bind\n");
     /* servers bind sockets to ports---notify the OS they accept connections */
     if (bind(sock, (struct sockaddr *) &addr, sizeof(addr))==-1)
     {
@@ -72,12 +73,14 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    printf("listen\n");
     if (listen(sock, 5))
     {
         close_socket(sock);
         fprintf(stderr, "Error listening on socket.\n");
         return EXIT_FAILURE;
     }
+    printf("listened\n");
 
     struct timeval tv;
     tv.tv_sec = 5;
@@ -94,18 +97,20 @@ int main(int argc, char* argv[])
         cli_size = sizeof(cli_addr);
         
         sockets_to_process = sockets;
-        if (select(max_socket, &sockets_to_process, NULL, NULL, NULL)<0){
+        printf("selecting\n");
+        if (select(FD_SETSIZE, &sockets_to_process, NULL, NULL, NULL)<0){
             perror("select error");
             return EXIT_FAILURE;
         };
+        printf("selected\n");
 
         char BAD_REQUEST_RESPONSE[28] = "HTTP/1.1 400 Bad Request\r\n\r\n";
-        // printf("sock\n");
-        // printf("%d", sock);
-        // printf("max_socket\n");
-        // printf("%d", max_socket);
+        printf("sock\n");
+        printf("%d", sock);
+        printf("max_socket\n");
+        printf("%d", max_socket);
 
-        for (int i=0; i < max_socket; i++){
+        for (int i=0; i < FD_SETSIZE; i++){
             if (FD_ISSET(i, &sockets_to_process)){
                 if (i==sock){
                     client_sock = accept(sock, (struct sockaddr *) &cli_addr, &cli_size);
@@ -128,7 +133,9 @@ int main(int argc, char* argv[])
                         close_socket(i);
                         close_socket(sock);
                         fprintf(stderr, "Error reading from client socket.\n");
-                        return EXIT_FAILURE;
+                        if (readret==-1){
+                            return EXIT_FAILURE;
+                        }
                     }
 
                     if (parse(buf, BUF_SIZE, i)==NULL){
