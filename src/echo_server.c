@@ -19,6 +19,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "parse.h"
 
 #define ECHO_PORT 9999
 #define BUF_SIZE 4096
@@ -41,10 +42,7 @@ int main(int argc, char* argv[])
     struct sockaddr_in addr, cli_addr;
     char buf[BUF_SIZE];
 
-    int port = atoi(argv[1]);
-
     fprintf(stdout, "----- Echo Server -----\n");
-    printf("%d\n", port);
     
     /* all networked programs must create a socket */
     if ((sock = socket(PF_INET, SOCK_STREAM, 0)) == -1)
@@ -54,8 +52,12 @@ int main(int argc, char* argv[])
     }
 
     addr.sin_family = AF_INET;
-    // addr.sin_port = htons(ECHO_PORT);
-    addr.sin_port = htons(port);
+    if (argc > 1){
+        int port = atoi(argv[1]);
+        addr.sin_port = htons(port);
+    }else{
+        addr.sin_port = htons(ECHO_PORT);
+    }
     addr.sin_addr.s_addr = INADDR_ANY;
 
     int optval = 1;
@@ -82,55 +84,76 @@ int main(int argc, char* argv[])
     tv.tv_sec = 5;
     tv.tv_usec = 0;
     fd_set readfds;
-     
+    fd_set sockets, sockets_to_process;
+    FD_ZERO(&sockets);
+    FD_SET(sock, &sockets);
+    int max_socket = sock;
 
     /* finally, loop waiting for input and then write it back */
     while (1)
     {
         cli_size = sizeof(cli_addr);
-        // if (select(1001, &sock, NULL, NULL, &tv) < 0){
-        //     perror("select error");
-        //     return EXIT_FAILURE;
-        // };
-        if ((client_sock = accept(sock, (struct sockaddr *) &cli_addr,
-                                    &cli_size)) == -1)
-        {
-            close(sock);
-            fprintf(stderr, "Error accepting connection.\n");
+        
+        sockets_to_process = sockets;
+        if (select(max_socket, &sockets_to_process, NULL, NULL, NULL)<0){
+            perror("select error");
             return EXIT_FAILURE;
-        }
+        };
 
-        readret = 0;
+        
 
-        while((readret = recv(client_sock, buf, BUF_SIZE, 0)) >= 1)
-        {
-            if (send(client_sock, buf, readret, 0) != readret)
-            {
-                close_socket(client_sock);
-                close_socket(sock);
-                fprintf(stderr, "Error sending to client.\n");
-                return EXIT_FAILURE;
+        for (int i=0; i < max_socket; i++){
+            if (FD_ISSET(i, &sockets_to_process)){
+                if (i==sock){
+                    client_sock = accept(sock, (struct sockaddr *) &cli_addr, &cli_size);
+                    if ((client_sock) == -1)
+                    {
+                        close(sock);
+                        fprintf(stderr, "Error accepting connection.\n");
+                        return EXIT_FAILURE;
+                    }
+                    FD_SET(client_sock, &sockets);
+                    if (i > max_socket){
+                        max_socket = i;
+                    }
+                }else{
+                    readret = 0;
+
+                    readret = recv(client_sock, buf, BUF_SIZE, 0);
+                        
+                    if (parse(buf, BUF_SIZE, client_sock)==NULL){
+                        strncpy(buf, "HTTP/1.1 400 Bad Request\r\n\r\n", BUF_SIZE);
+                        readret = sizeof(buf);
+                    }
+                    if (send(client_sock, buf, readret, 0) != readret)
+                    {
+                        close_socket(client_sock);
+                        close_socket(sock);
+                        fprintf(stderr, "Error sending to client.\n");
+                        return EXIT_FAILURE;
+                    }
+                    memset(buf, 0, BUF_SIZE);
+
+                    if (readret == -1)
+                    {
+                        close_socket(client_sock);
+                        close_socket(sock);
+                        fprintf(stderr, "Error reading from client socket.\n");
+                        return EXIT_FAILURE;
+                    }
+
+                    if (close_socket(client_sock))
+                    {
+                        close_socket(sock);
+                        fprintf(stderr, "Error closing client socket.\n");
+                        return EXIT_FAILURE;
+                    }
+
+                    FD_CLR(i, &sockets_to_process);
+                    return EXIT_SUCCESS;
+                }
             }
-            memset(buf, 0, BUF_SIZE);
-        } 
-
-        if (readret == -1)
-        {
-            close_socket(client_sock);
-            close_socket(sock);
-            fprintf(stderr, "Error reading from client socket.\n");
-            return EXIT_FAILURE;
         }
-
-        if (close_socket(client_sock))
-        {
-            close_socket(sock);
-            fprintf(stderr, "Error closing client socket.\n");
-            return EXIT_FAILURE;
-        }
+        close_socket(sock);
     }
-
-    close_socket(sock);
-
-    return EXIT_SUCCESS;
 }
