@@ -72,7 +72,6 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-
     if (listen(sock, 5))
     {
         close_socket(sock);
@@ -100,7 +99,11 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         };
 
-        
+        char BAD_REQUEST_RESPONSE[28] = "HTTP/1.1 400 Bad Request\r\n\r\n";
+        // printf("sock\n");
+        // printf("%d", sock);
+        // printf("max_socket\n");
+        // printf("%d", max_socket);
 
         for (int i=0; i < max_socket; i++){
             if (FD_ISSET(i, &sockets_to_process)){
@@ -113,47 +116,47 @@ int main(int argc, char* argv[])
                         return EXIT_FAILURE;
                     }
                     FD_SET(client_sock, &sockets);
-                    if (i > max_socket){
-                        max_socket = i;
+                    if (client_sock > max_socket){
+                        max_socket = client_sock;
                     }
                 }else{
                     readret = 0;
 
-                    readret = recv(client_sock, buf, BUF_SIZE, 0);
-                        
-                    if (parse(buf, BUF_SIZE, client_sock)==NULL){
-                        strncpy(buf, "HTTP/1.1 400 Bad Request\r\n\r\n", BUF_SIZE);
-                        readret = sizeof(buf);
-                    }
-                    if (send(client_sock, buf, readret, 0) != readret)
+                    readret = recv(i, buf, BUF_SIZE, 0);
+                    if (readret <= 0)
                     {
-                        close_socket(client_sock);
+                        close_socket(i);
+                        close_socket(sock);
+                        fprintf(stderr, "Error reading from client socket.\n");
+                        return EXIT_FAILURE;
+                    }
+
+                    if (parse(buf, BUF_SIZE, i)==NULL){
+                        memcpy(buf, BAD_REQUEST_RESPONSE, sizeof(BAD_REQUEST_RESPONSE));
+                        readret = sizeof(BAD_REQUEST_RESPONSE);
+                    }
+                    printf("%s\n", buf);
+                    if (send(i, buf, readret, 0) != readret)
+                    {
+                        close_socket(i);
                         close_socket(sock);
                         fprintf(stderr, "Error sending to client.\n");
                         return EXIT_FAILURE;
                     }
                     memset(buf, 0, BUF_SIZE);
 
-                    if (readret == -1)
-                    {
-                        close_socket(client_sock);
-                        close_socket(sock);
-                        fprintf(stderr, "Error reading from client socket.\n");
-                        return EXIT_FAILURE;
-                    }
-
-                    if (close_socket(client_sock))
+                    if (close_socket(i))
                     {
                         close_socket(sock);
                         fprintf(stderr, "Error closing client socket.\n");
                         return EXIT_FAILURE;
                     }
 
-                    FD_CLR(i, &sockets_to_process);
+                    FD_CLR(i, &sockets);
                     return EXIT_SUCCESS;
                 }
             }
         }
-        close_socket(sock);
     }
+    close_socket(sock);
 }
