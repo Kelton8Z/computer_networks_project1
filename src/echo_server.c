@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
         };
         printf("selected\n");
 
-        char BAD_REQUEST_RESPONSE[28] = "HTTP/1.1 400 Bad Request\r\n\r\n";
+        char BAD_REQUEST_RESPONSE[29] = "HTTP/1.1 400 Bad Request\r\n\r\n";
         printf("sock\n");
         printf("%d", sock);
         printf("max_socket\n");
@@ -130,10 +130,11 @@ int main(int argc, char* argv[])
                     readret = recv(i, buf, BUF_SIZE, 0);
                     if (readret <= 0)
                     {
+                        FD_CLR(i, &sockets);
                         close_socket(i);
-                        close_socket(sock);
-                        fprintf(stderr, "Error reading from client socket.\n");
                         if (readret==-1){
+                            fprintf(stderr, "Error reading from client socket.\n");
+                            close_socket(sock);
                             return EXIT_FAILURE;
                         }
                     }
@@ -145,22 +146,22 @@ int main(int argc, char* argv[])
                     printf("%s\n", buf);
                     if (send(i, buf, readret, 0) != readret)
                     {
+                        printf('%s\n', "closing server sock");
                         close_socket(i);
+                        printf('%s\n', "closing server sock");
                         close_socket(sock);
                         fprintf(stderr, "Error sending to client.\n");
                         return EXIT_FAILURE;
                     }
                     memset(buf, 0, BUF_SIZE);
 
-                    if (close_socket(i))
-                    {
-                        close_socket(sock);
-                        fprintf(stderr, "Error closing client socket.\n");
-                        return EXIT_FAILURE;
-                    }
+                    // if (close_socket(i))
+                    // {
+                    //     close_socket(sock);
+                    //     fprintf(stderr, "Error closing client socket.\n");
+                    //     return EXIT_FAILURE;
+                    // }
 
-                    FD_CLR(i, &sockets);
-                    return EXIT_SUCCESS;
                 }
             }
         }
