@@ -37,7 +37,7 @@ typedef struct {
   unsigned short http_minor;
   unsigned short status_code; /* responses only */
   char http_version[50];
-  unsigned char method;       /* requests only */
+  char method[50];       /* requests only */
   char http_uri[4096];
 	Request_header *headers;
 	int header_count;

@@ -202,9 +202,19 @@ t_ws {
 
 request_line: token t_sp text t_sp text t_crlf {
 	YPRINTF("request_Line:\n%s\n%s\n%s\n",$1, $3,$5);
+	
     strcpy(parsing_request->method, $1);
+	char *method = parsing_request->method;
+	if (strcmp(method, "GET") != 0 && strcmp(method, "POST") != 0 && strcmp(method, "HEAD") != 0){
+		parsing_request->status_code = 501;
+		return SUCCESS;
+	}
 	strcpy(parsing_request->http_uri, $3);
 	strcpy(parsing_request->http_version, $5);
+	if (strcmp(parsing_request->http_version, "HTTP/1.1") != 0){
+		parsing_request->status_code = 505;
+		return SUCCESS; 
+	}
 }
 
 request_header: token ows t_colon ows text ows t_crlf {
@@ -230,6 +240,7 @@ multiple_headers: |request_header multiple_headers{
  */
 request: request_line multiple_headers t_crlf{
 	YPRINTF("parsing_request: Matched Success.\n");
+	parsing_request->status_code = 200;
 	return SUCCESS;
 };
 
