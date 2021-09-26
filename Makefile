@@ -15,7 +15,7 @@ CFLAGS   := -g -Wall
 # DEPS = parse.h y.tab.h
 
 default: all
-all : example lisod echo_client
+all : lisod echo_client
 
 example: $(OBJ)
 	$(CC) $^ -g -o $@

@@ -6,6 +6,7 @@
 
 %{
 #include "parse.h"
+// #include "http_parser.h"
 
 /* Define YACCDEBUG to enable debug messages for this lex file */
 #define YACCDEBUG
@@ -20,7 +21,7 @@
 /* yyparse() calls yyerror() on error */
 void yyerror (const char *s);
 
-void set_parsing_options(char *buf, size_t siz, Request *parsing_request);
+void set_parsing_options(char *buf, size_t siz, http_parser *parsing_request);
 
 /* yyparse() calls yylex() to get tokens */
 extern int yylex();
@@ -41,7 +42,7 @@ int parsing_offset;
 size_t parsing_buf_siz;
 
 /* Current parsing_request Header Struct */
-Request *parsing_request;
+http_parser *parsing_request;
 
 %}
 
@@ -201,7 +202,7 @@ t_ws {
 
 request_line: token t_sp text t_sp text t_crlf {
 	YPRINTF("request_Line:\n%s\n%s\n%s\n",$1, $3,$5);
-    strcpy(parsing_request->http_method, $1);
+    strcpy(parsing_request->method, $1);
 	strcpy(parsing_request->http_uri, $3);
 	strcpy(parsing_request->http_version, $5);
 }
@@ -236,7 +237,7 @@ request: request_line multiple_headers t_crlf{
 
 /* C code */
 
-void set_parsing_options(char *buf, size_t siz, Request *request)
+void set_parsing_options(char *buf, size_t siz, http_parser *request)
 {
     parsing_buf = buf;
 	parsing_offset = 0;

@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include "parse.h"
 
+
 #define ECHO_PORT 9999
 #define BUF_SIZE 4096
 
@@ -83,7 +84,7 @@ int main(int argc, char* argv[])
     printf("listened\n");
 
     struct timeval tv;
-    tv.tv_sec = 5;
+    tv.tv_sec = 40;
     tv.tv_usec = 0;
     fd_set readfds;
     fd_set sockets, sockets_to_process;
@@ -105,6 +106,10 @@ int main(int argc, char* argv[])
         printf("selected\n");
 
         char BAD_REQUEST_RESPONSE[29] = "HTTP/1.1 400 Bad Request\r\n\r\n";
+        char NOT_FOUND_RESPONSE[27] = "HTTP/1.1 404 Not found\r\n\r\n";
+        char Connection_Timeout_RESPONSE[36] = "HTTP/1.1 408 Connection timeout\r\n\r\n";
+        char Unsupported_Method_RESPONSE[38] = "HTTP/1.1 501 Method Unimplemented\r\n\r\n";
+        char BAD_VERSION_RESPONSE[36] = "HTTP/1.1 505 Bad version number\r\n\r\n";
         printf("sock\n");
         printf("%d", sock);
         printf("max_socket\n");
@@ -138,8 +143,33 @@ int main(int argc, char* argv[])
                             return EXIT_FAILURE;
                         }
                     }
+                    http_parser *parse_res = parse(buf, BUF_SIZE, i);
+                    if (parse_res==400){
+                        memcpy(buf, BAD_REQUEST_RESPONSE, sizeof(BAD_REQUEST_RESPONSE));
+                        readret = sizeof(BAD_REQUEST_RESPONSE);
+                    }else if (parse_res==404)
+                    {
+                        memcpy(buf, NOT_FOUND_RESPONSE, sizeof(NOT_FOUND_RESPONSE));
+                        readret = sizeof(NOT_FOUND_RESPONSE);
+                    }else if (parse_res==505)
+                    {
+                        memcpy(buf, BAD_VERSION_RESPONSE, sizeof(BAD_VERSION_RESPONSE));
+                        readret = sizeof(BAD_VERSION_RESPONSE);
+                    // }else if (parse_res==408)
+                    // {
+                    //     memcpy(buf, Connection_Timeout_RESPONSE, sizeof(Connection_Timeout_RESPONSE));
+                    //     readret = sizeof(Connection_Timeout_RESPONSE);
+                    }else if (parse_res==501)
+                    {
+                        memcpy(buf, Unsupported_Method_RESPONSE, sizeof(Unsupported_Method_RESPONSE));
+                        readret = sizeof(Unsupported_Method_RESPONSE);
+                    }else if (parse_res==200){
+                        char GOOD_RESPONSE[61] = "HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: 4\r\n";
+                        memcpy(buf, GOOD_RESPONSE, sizeof(GOOD_RESPONSE));
+                        readret = sizeof(GOOD_RESPONSE);
+                    }
 
-                    if (parse(buf, BUF_SIZE, i)==NULL){
+                    if (parse_res==NULL){
                         memcpy(buf, BAD_REQUEST_RESPONSE, sizeof(BAD_REQUEST_RESPONSE));
                         readret = sizeof(BAD_REQUEST_RESPONSE);
                     }
