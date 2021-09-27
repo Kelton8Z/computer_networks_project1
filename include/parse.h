@@ -39,6 +39,7 @@ typedef struct {
   char http_version[50];
   char method[50];       /* requests only */
   char http_uri[4096];
+  char *conn_header;
 	Request_header *headers;
 	int header_count;
 } http_parser;

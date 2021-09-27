@@ -168,9 +168,31 @@ int main(int argc, char* argv[])
                             memcpy(buf, Unsupported_Method_RESPONSE, sizeof(Unsupported_Method_RESPONSE));
                             readret = sizeof(Unsupported_Method_RESPONSE);
                         }else if (parse_res->status_code==200){
-                            char GOOD_RESPONSE[61] = "HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: 4\r\n";
-                            memcpy(buf, GOOD_RESPONSE, sizeof(GOOD_RESPONSE));
-                            readret = sizeof(GOOD_RESPONSE);
+                            printf("%s%d\n", "parse.c content length: ", parse_res->content_length);
+                            char *content_len;
+                            char GOOD_RESPONSE[65];
+                            readret = 0;
+                            if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
+                                perror("asprintf");
+                            } else {
+                                strcat(GOOD_RESPONSE, "HTTP/1.1 200 OK\r\nConnection: ");
+                                readret += sizeof("HTTP/1.1 200 OK\r\nConnection: ");
+                                strcat(GOOD_RESPONSE, parse_res->conn_header);
+                                readret += sizeof(parse_res->conn_header);
+                                strcat(GOOD_RESPONSE, "\r\nContent-Length: ");
+                                readret += sizeof("\r\nContent-Length: ");
+                                strcat(GOOD_RESPONSE, content_len);
+                                readret += sizeof(content_len);
+                                strcpy(buf, GOOD_RESPONSE);
+                                printf("%s\n", buf);
+                                free(content_len);
+                            }
+                            // char *content_len = parse_res->content_length+'0';
+                            // char *GOOD_RESPONSE = strcat("HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: ", content_len);
+                            // // GOOD_RESPONSE = strcat(GOOD_RESPONSE, "\r\n");
+                            // memcpy(buf, GOOD_RESPONSE, sizeof(GOOD_RESPONSE));
+                            // readret = sizeof("HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: ") + sizeof(num);
+                            // readret = sizeof(GOOD_RESPONSE);
                         }
                     }
 

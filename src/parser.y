@@ -202,7 +202,7 @@ t_ws {
 
 request_line: token t_sp text t_sp text t_crlf {
 	YPRINTF("request_Line:\n%s\n%s\n%s\n",$1, $3,$5);
-	
+	parsing_request->conn_header = "keep-alive";
     strcpy(parsing_request->method, $1);
 	char *method = parsing_request->method;
 	if (strcmp(method, "GET") != 0 && strcmp(method, "POST") != 0 && strcmp(method, "HEAD") != 0){
@@ -220,7 +220,18 @@ request_line: token t_sp text t_sp text t_crlf {
 request_header: token ows t_colon ows text ows t_crlf {
 	YPRINTF("request_Header:\n%s\n%s\n",$1,$5);
     strcpy(parsing_request->headers[parsing_request->header_count].header_name, $1);
+	char *header_name = parsing_request->headers[parsing_request->header_count].header_name;
 	strcpy(parsing_request->headers[parsing_request->header_count].header_value, $5);
+	char *header_value = parsing_request->headers[parsing_request->header_count].header_value;
+	if (strcmp(header_name, "Connection") == 0){
+		if (strcmp(header_value, "close")==0){
+			parsing_request->conn_header = "close";
+		}
+	}else if (strcmp(header_name, "Content-Length") == 0){
+		printf("%s%s\n", "yacc head val: ", header_value);
+		parsing_request->content_length = atoi(header_value);
+		printf("%s%d\n", "yacc content length: ", parsing_request->content_length);
+	}
 	parsing_request->header_count++;
 };
 

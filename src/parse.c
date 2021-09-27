@@ -59,6 +59,7 @@ http_parser * parse(char *buffer, int size, int socketFd) {
 		set_parsing_options(buf, i, request);
 		printf("Got to end state\n");
 		yyparse();
+		printf("%s%d\n", "content length: ", request->content_length);
 		return request;
 		// if (yyparse() == SUCCESS) {
         //     return request;
