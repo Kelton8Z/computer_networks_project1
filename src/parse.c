@@ -55,11 +55,11 @@ http_parser * parse(char *buffer, int size, int socketFd) {
 		// request->http_uri = (char *) malloc(sizeof(request->http_uri));
 		// request->http_version = (char *) malloc(sizeof(request->http_version));
 
-		// yyrestart();
+		yyrestart();
 		set_parsing_options(buf, i, request);
 		printf("Got to end state\n");
 		yyparse();
-		printf("%s%d\n", "content length: ", request->content_length);
+		printf("%s%d\n", "parse.c content length: ", request->content_length);
 		return request;
 		// if (yyparse() == SUCCESS) {
         //     return request;
