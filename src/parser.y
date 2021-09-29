@@ -202,13 +202,17 @@ t_ws {
 
 request_line: token t_sp text t_sp text t_crlf {
 	YPRINTF("request_Line:\n%s\n%s\n%s\n",$1, $3,$5);
-	parsing_request->conn_header = "keep-alive";
+	parsing_request->conn_header = "Keep-Alive";
     strcpy(parsing_request->method, $1);
 	char *method = parsing_request->method;
 	if (strcmp(method, "GET") != 0 && strcmp(method, "POST") != 0 && strcmp(method, "HEAD") != 0){
 		parsing_request->status_code = 501;
 		return SUCCESS;
 	}
+	// else if (strcmp(method, "HEAD") == 0){
+
+	// }
+	
 	strcpy(parsing_request->http_uri, $3);
 	strcpy(parsing_request->http_version, $5);
 	if (strcmp(parsing_request->http_version, "HTTP/1.1") != 0){

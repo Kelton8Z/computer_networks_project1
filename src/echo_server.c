@@ -112,8 +112,8 @@ int main(int argc, char* argv[])
         char BAD_VERSION_RESPONSE[36] = "HTTP/1.1 505 Bad version number\r\n\r\n";
         printf("sock\n");
         printf("%d", sock);
-        printf("max_socket\n");
-        printf("%d", max_socket);
+        // printf("max_socket\n");
+        // printf("%d", max_socket);
 
         for (int i=0; i < FD_SETSIZE; i++){
             if (FD_ISSET(i, &sockets_to_process)){
@@ -126,9 +126,9 @@ int main(int argc, char* argv[])
                         return EXIT_FAILURE;
                     }
                     FD_SET(client_sock, &sockets);
-                    if (client_sock > max_socket){
-                        max_socket = client_sock;
-                    }
+                    // if (client_sock > max_socket){
+                    //     max_socket = client_sock;
+                    // }
                 }else{
                     readret = 0;
 
@@ -155,16 +155,14 @@ int main(int argc, char* argv[])
                         {
                             memcpy(buf, NOT_FOUND_RESPONSE, sizeof(NOT_FOUND_RESPONSE));
                             readret = sizeof(NOT_FOUND_RESPONSE);
-                        }else if (parse_res->status_code==505)
-                        {
+                        }else if (parse_res->status_code==505){
                             memcpy(buf, BAD_VERSION_RESPONSE, sizeof(BAD_VERSION_RESPONSE));
                             readret = sizeof(BAD_VERSION_RESPONSE);
                         // }else if (parse_res==408)
                         // {
                         //     memcpy(buf, Connection_Timeout_RESPONSE, sizeof(Connection_Timeout_RESPONSE));
                         //     readret = sizeof(Connection_Timeout_RESPONSE);
-                        }else if (parse_res->status_code==501)
-                        {
+                        }else if (parse_res->status_code==501){
                             memcpy(buf, Unsupported_Method_RESPONSE, sizeof(Unsupported_Method_RESPONSE));
                             readret = sizeof(Unsupported_Method_RESPONSE);
                         }else if (parse_res->status_code==200){
@@ -175,34 +173,37 @@ int main(int argc, char* argv[])
                             if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
                                 perror("asprintf");
                             } else {
-                                strcat(GOOD_RESPONSE, "HTTP/1.1 200 OK\r\nConnection: ");
-                                readret += sizeof("HTTP/1.1 200 OK\r\nConnection: ");
+                                strcat(GOOD_RESPONSE, "HTTP/1.1 200 OK\r\nConnection:");
+                                readret += sizeof("HTTP/1.1 200 OK\r\nConnection:");
                                 strcat(GOOD_RESPONSE, parse_res->conn_header);
                                 readret += sizeof(parse_res->conn_header);
-                                strcat(GOOD_RESPONSE, "\r\nContent-Length: ");
-                                readret += sizeof("\r\nContent-Length: ");
+                                strcat(GOOD_RESPONSE, "\r\nServer: Liso/1.0");
+                                readret += sizeof("\r\nServer: Liso/1.0");
+                                strcat(GOOD_RESPONSE, "\r\nContent-Length:");
+                                readret += sizeof("\r\nContent-Length:");
                                 strcat(GOOD_RESPONSE, content_len);
                                 readret += sizeof(content_len);
                                 strcpy(buf, GOOD_RESPONSE);
                                 printf("%s\n", buf);
                                 free(content_len);
                             }
-                            // char *content_len = parse_res->content_length+'0';
-                            // char *GOOD_RESPONSE = strcat("HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: ", content_len);
-                            // // GOOD_RESPONSE = strcat(GOOD_RESPONSE, "\r\n");
-                            // memcpy(buf, GOOD_RESPONSE, sizeof(GOOD_RESPONSE));
-                            // readret = sizeof("HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\nContent-Length: ") + sizeof(num);
-                            // readret = sizeof(GOOD_RESPONSE);
+                        }
+                        // printf("%s%s\n", "conn header", parse_res->conn_header);
+                        if (strcmp(parse_res->conn_header, "close")==0){
+                            close_socket(i);
                         }
                     }
 
-                    
                     printf("%s\n", buf);
-                    if (send(i, buf, readret, 0) != readret)
+                    printf("%s%d\n", "readret : ", readret);
+                    
+                    int sent_len = send(i, buf, readret, 0);
+                    printf("%s%d\n", "sent len", sent_len);
+                    if (sent_len != readret)
                     {
-                        printf("%s\n", "closing server sock");
+                        // printf("%s\n", "closing server sock");
+                        // close_socket(sock);
                         close_socket(i);
-                        close_socket(sock);
                         fprintf(stderr, "Error sending to client.\n");
                         return EXIT_FAILURE;
                     }
