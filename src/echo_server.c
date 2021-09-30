@@ -131,19 +131,24 @@ int main(int argc, char* argv[])
                     // }
                 }else{
                     readret = 0;
-
+                    printf("buf to parse %s\n", buf);
+                    http_parser *parse_res = parse(buf, BUF_SIZE, i);
                     readret = recv(i, buf, BUF_SIZE, 0);
+                    printf("buf received %s\n", buf);
                     if (readret <= 0)
                     {
                         FD_CLR(i, &sockets);
-                        close_socket(i);
+                        if (parse_res && strcmp(parse_res->conn_header, "close")==0){
+                            close_socket(i);
+                        }
                         if (readret==-1){
                             fprintf(stderr, "Error reading from client socket.\n");
                             close_socket(sock);
                             return EXIT_FAILURE;
                         }
                     }
-                    http_parser *parse_res = parse(buf, BUF_SIZE, i);
+                    
+                    
                     if (parse_res==NULL){
                         memcpy(buf, BAD_REQUEST_RESPONSE, sizeof(BAD_REQUEST_RESPONSE));
                         readret = sizeof(BAD_REQUEST_RESPONSE);
@@ -162,13 +167,13 @@ int main(int argc, char* argv[])
                         // {
                         //     memcpy(buf, Connection_Timeout_RESPONSE, sizeof(Connection_Timeout_RESPONSE));
                         //     readret = sizeof(Connection_Timeout_RESPONSE);
-                        }else if (parse_res->status_code==501){
+                        }else if (parse_res->status_code==501 || (strcmp(parse_res->method, "POST")==0 && parse_res->content_length==NULL)){
                             memcpy(buf, Unsupported_Method_RESPONSE, sizeof(Unsupported_Method_RESPONSE));
                             readret = sizeof(Unsupported_Method_RESPONSE);
                         }else if (parse_res->status_code==200){
                             printf("%s%d\n", "parse.c content length: ", parse_res->content_length);
                             char *content_len;
-                            char GOOD_RESPONSE[65];
+                            char GOOD_RESPONSE[150];
                             readret = 0;
                             if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
                                 perror("asprintf");
@@ -189,12 +194,10 @@ int main(int argc, char* argv[])
                             }
                         }
                         // printf("%s%s\n", "conn header", parse_res->conn_header);
-                        if (strcmp(parse_res->conn_header, "close")==0){
-                            close_socket(i);
-                        }
+                        
                     }
 
-                    printf("%s\n", buf);
+                    printf("buf to send %s\n", buf);
                     printf("%s%d\n", "readret : ", readret);
                     
                     int sent_len = send(i, buf, readret, 0);
