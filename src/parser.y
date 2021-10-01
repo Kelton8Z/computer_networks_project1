@@ -227,11 +227,11 @@ request_header: token ows t_colon ows text ows t_crlf {
 	char *header_name = parsing_request->headers[parsing_request->header_count].header_name;
 	strcpy(parsing_request->headers[parsing_request->header_count].header_value, $5);
 	char *header_value = parsing_request->headers[parsing_request->header_count].header_value;
-	if (strcmp(header_name, "Connection") == 0){
-		if (strcmp(header_value, "close")==0){
+	if (strcmp(header_name, "Connection") == 0 || strcmp(header_name, "connection") == 0){
+		if (strcmp(header_value, "close")==0 || strcmp(header_value, "Close")==0){
 			parsing_request->conn_header = "close";
 		}
-	}else if (strcmp(header_name, "Content-Length") == 0){
+	}else if (strcmp(header_name, "Content-Length") == 0 || strcmp(header_name, "content-length") == 0){
 		printf("%s%s\n", "yacc head val: ", header_value);
 		parsing_request->content_length = atoi(header_value);
 		printf("%s%d\n", "yacc content length: ", parsing_request->content_length);

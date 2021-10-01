@@ -19,6 +19,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
 #include "parse.h"
 
 
@@ -180,14 +182,41 @@ int main(int argc, char* argv[])
                             } else {
                                 strcat(GOOD_RESPONSE, "HTTP/1.1 200 OK\r\nConnection:");
                                 readret += sizeof("HTTP/1.1 200 OK\r\nConnection:");
+
                                 strcat(GOOD_RESPONSE, parse_res->conn_header);
                                 readret += sizeof(parse_res->conn_header);
+
                                 strcat(GOOD_RESPONSE, "\r\nServer: Liso/1.0");
                                 readret += sizeof("\r\nServer: Liso/1.0");
+
                                 strcat(GOOD_RESPONSE, "\r\nContent-Length:");
                                 readret += sizeof("\r\nContent-Length:");
                                 strcat(GOOD_RESPONSE, content_len);
                                 readret += sizeof(content_len);
+
+                                struct stat attr;
+                                stat(i, &attr);
+                                strcat(GOOD_RESPONSE, "\r\nLast-Modified: ");
+                                char *last_modified_time = ctime(&attr.st_mtim);
+                                strcat(GOOD_RESPONSE, last_modified_time);
+                                readret += sizeof("\r\nDate: ")+sizeof(last_modified_time);
+
+                                time_t rawtime;
+                                struct tm *info;
+                                time(&rawtime);
+                                /* Get GMT time */
+                                info = gmtime(&rawtime );
+                                // day-name, day month year hour:minute:second GMT
+                                char *date;
+                                char *format = "%a, %d %b %Y %T GMT";
+                                // const struct tm *restrict timeptr;
+                                strftime(date, BUF_SIZE, format, info);
+                                readret += sizeof("\r\nDate: ")+sizeof(date);
+
+                                char *content = open(i, O_RDONLY);
+                                strcat(GOOD_RESPONSE, content);
+                                readret += content_len;
+
                                 strcpy(buf, GOOD_RESPONSE);
                                 printf("%s\n", buf);
                                 free(content_len);
