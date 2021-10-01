@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
                     // }
                 }else{
                     readret = 0;
-                    char *content_len;
+                    char content_len;
                     
                     readret = recv(i, buf, BUF_SIZE, 0);
                     if (readret <= 0)
@@ -186,11 +186,13 @@ int main(int argc, char* argv[])
                             // printf("%s%s\n", "conn header", parse_res->conn_header);
                         
                         }
-                    
+                        printf("%s %d\n", "content len before asprintf:", parse_res->content_length);
                         // if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
                         //     perror("asprintf");
-                        // } else {
-                        asprintf(&content_len, "%d", parse_res->content_length);
+                        // }
+                        content_len = parse_res->content_length+'0';
+                        // asprintf(&content_len, "%d", parse_res->content_length);
+                        printf("%s %c\n", "content len:", content_len);
                         strcat(RESPONSE, parse_res->conn_header);
                         readret += sizeof(parse_res->conn_header);
 
@@ -199,7 +201,7 @@ int main(int argc, char* argv[])
 
                         strcat(RESPONSE, "\r\nContent-Length:");
                         readret += sizeof("\r\nContent-Length:");
-                        strcat(RESPONSE, content_len);
+                        strcat(RESPONSE, &content_len);
                         printf("%s %d\n", "readret without content :", readret);
                         readret += sizeof(content_len);
 
@@ -253,16 +255,14 @@ int main(int argc, char* argv[])
                         if (strcmp(parse_res->method, "HEAD")){ // not HEAD request
 
                             // open(i, O_RDONLY);
-                            // char content[BUF_SIZE];
-                            char *content;
+                            char content[BUF_SIZE];
                             // read(i, content, content_len);
                             
                             
-                            // fgets(content, BUF_SIZE, stream);
-                            content = gets(stream);
+                            fgets(content, BUF_SIZE, stream);
                             printf("%s %s\n", "content:", content);
                             content_len = sizeof(content);
-                            printf("%s %d\n", "content len:", content_len);
+                            
                             // strcat(RESPONSE, "\r\nmessage-body");
                             // readret += sizeof("\r\nmessage-body: ");
                             if (content_len + readret <= BUF_SIZE){
