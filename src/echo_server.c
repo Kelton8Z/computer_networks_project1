@@ -37,6 +37,12 @@ int close_socket(int sock)
     return 0;
 }
 
+const char *get_file_ext(const char *filename) {
+    const char *dot = strrchr(filename, '.');
+    if(!dot || dot == filename) return "";
+    return dot;
+}
+
 int main(int argc, char* argv[])
 {
     int sock, client_sock;
@@ -55,9 +61,11 @@ int main(int argc, char* argv[])
     }
 
     addr.sin_family = AF_INET;
+    char *www;
     if (argc > 1){
         int port = atoi(argv[1]);
         addr.sin_port = htons(port);
+        www = argv[4];
     }else{
         addr.sin_port = htons(ECHO_PORT);
     }
@@ -100,20 +108,17 @@ int main(int argc, char* argv[])
         cli_size = sizeof(cli_addr);
         
         sockets_to_process = sockets;
-        printf("selecting\n");
         if (select(FD_SETSIZE, &sockets_to_process, NULL, NULL, &tv)<0){
             perror("select error");
             return EXIT_FAILURE;
         };
-        printf("selected\n");
+        char RESPONSE[150];
+        // char BAD_REQUEST_RESPONSE[29] = "HTTP/1.1 400 Bad Request\r\n\r\n";
+        // char NOT_FOUND_RESPONSE[27] = "HTTP/1.1 404 Not found\r\n\r\n";
+        // char Connection_Timeout_RESPONSE[36] = "HTTP/1.1 408 Connection timeout\r\n\r\n";
+        // char Unsupported_Method_RESPONSE[38] = "HTTP/1.1 501 Method Unimplemented\r\n\r\n";
+        // char BAD_VERSION_RESPONSE[36] = "HTTP/1.1 505 Bad version number\r\n\r\n";
 
-        char BAD_REQUEST_RESPONSE[29] = "HTTP/1.1 400 Bad Request\r\n\r\n";
-        char NOT_FOUND_RESPONSE[27] = "HTTP/1.1 404 Not found\r\n\r\n";
-        char Connection_Timeout_RESPONSE[36] = "HTTP/1.1 408 Connection timeout\r\n\r\n";
-        char Unsupported_Method_RESPONSE[38] = "HTTP/1.1 501 Method Unimplemented\r\n\r\n";
-        char BAD_VERSION_RESPONSE[36] = "HTTP/1.1 505 Bad version number\r\n\r\n";
-        printf("sock\n");
-        printf("%d", sock);
         // printf("max_socket\n");
         // printf("%d", max_socket);
 
@@ -133,121 +138,141 @@ int main(int argc, char* argv[])
                     // }
                 }else{
                     readret = 0;
-                    printf("buf to parse %s\n", buf);
-                    http_parser *parse_res = parse(buf, BUF_SIZE, i);
+                    char *content_len;
+                    
                     readret = recv(i, buf, BUF_SIZE, 0);
-                    printf("buf received %s\n", buf);
                     if (readret <= 0)
                     {
-                        FD_CLR(i, &sockets);
-                        if (parse_res && strcmp(parse_res->conn_header, "close")==0){
-                            close_socket(i);
-                        }
                         if (readret==-1){
                             fprintf(stderr, "Error reading from client socket.\n");
+                            close_socket(i);
                             close_socket(sock);
                             return EXIT_FAILURE;
                         }
-                    }
-                    
-                    
-                    if (parse_res==NULL){
-                        memcpy(buf, BAD_REQUEST_RESPONSE, sizeof(BAD_REQUEST_RESPONSE));
-                        readret = sizeof(BAD_REQUEST_RESPONSE);
-                    }else{
-                        if (parse_res->status_code==400){
-                            memcpy(buf, BAD_REQUEST_RESPONSE, sizeof(BAD_REQUEST_RESPONSE));
-                            readret = sizeof(BAD_REQUEST_RESPONSE);
-                        }else if (parse_res->status_code==404)
-                        {
-                            memcpy(buf, NOT_FOUND_RESPONSE, sizeof(NOT_FOUND_RESPONSE));
-                            readret = sizeof(NOT_FOUND_RESPONSE);
-                        }else if (parse_res->status_code==505){
-                            memcpy(buf, BAD_VERSION_RESPONSE, sizeof(BAD_VERSION_RESPONSE));
-                            readret = sizeof(BAD_VERSION_RESPONSE);
-                        // }else if (parse_res==408)
-                        // {
-                        //     memcpy(buf, Connection_Timeout_RESPONSE, sizeof(Connection_Timeout_RESPONSE));
-                        //     readret = sizeof(Connection_Timeout_RESPONSE);
-                        }else if (parse_res->status_code==501 || (strcmp(parse_res->method, "POST")==0 && parse_res->content_length==NULL)){
-                            memcpy(buf, Unsupported_Method_RESPONSE, sizeof(Unsupported_Method_RESPONSE));
-                            readret = sizeof(Unsupported_Method_RESPONSE);
-                        }else if (parse_res->status_code==200){
-                            printf("%s%d\n", "parse.c content length: ", parse_res->content_length);
-                            char *content_len;
-                            char GOOD_RESPONSE[150];
-                            readret = 0;
-                            if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
-                                perror("asprintf");
-                            } else {
-                                strcat(GOOD_RESPONSE, "HTTP/1.1 200 OK\r\nConnection:");
-                                readret += sizeof("HTTP/1.1 200 OK\r\nConnection:");
-
-                                strcat(GOOD_RESPONSE, parse_res->conn_header);
-                                readret += sizeof(parse_res->conn_header);
-
-                                strcat(GOOD_RESPONSE, "\r\nServer: Liso/1.0");
-                                readret += sizeof("\r\nServer: Liso/1.0");
-
-                                strcat(GOOD_RESPONSE, "\r\nContent-Length:");
-                                readret += sizeof("\r\nContent-Length:");
-                                strcat(GOOD_RESPONSE, content_len);
-                                readret += sizeof(content_len);
-
-                                struct stat attr;
-                                stat(i, &attr);
-                                strcat(GOOD_RESPONSE, "\r\nLast-Modified: ");
-                                char *last_modified_time = ctime(&attr.st_mtim);
-                                strcat(GOOD_RESPONSE, last_modified_time);
-                                readret += sizeof("\r\nDate: ")+sizeof(last_modified_time);
-
-                                time_t rawtime;
-                                struct tm *info;
-                                time(&rawtime);
-                                /* Get GMT time */
-                                info = gmtime(&rawtime );
-                                // day-name, day month year hour:minute:second GMT
-                                char *date;
-                                char *format = "%a, %d %b %Y %T GMT";
-                                // const struct tm *restrict timeptr;
-                                strftime(date, BUF_SIZE, format, info);
-                                readret += sizeof("\r\nDate: ")+sizeof(date);
-
-                                char *content = open(i, O_RDONLY);
-                                strcat(GOOD_RESPONSE, content);
-                                readret += content_len;
-
-                                strcpy(buf, GOOD_RESPONSE);
-                                printf("%s\n", buf);
-                                free(content_len);
-                            }
+                        // if (parse_res && strcmp(parse_res->conn_header, "close")==0){
+                        if (close_socket(i)){
+                            close_socket(sock);
+                            fprintf(stderr, "Error closing client socket.\n");
+                            return EXIT_FAILURE;
                         }
-                        // printf("%s%s\n", "conn header", parse_res->conn_header);
-                        
-                    }
+                        FD_CLR(i, &sockets);
+                    }else{     
+                        printf("buf to parse %s\n", buf);
+                        http_parser *parse_res = parse(buf, BUF_SIZE, i);
+                        if (parse_res==NULL){
+                            strcat(RESPONSE, "HTTP/1.1 400 Bad Request\r\n\r\n");
+                            readret += sizeof("HTTP/1.1 400 Bad Request\r\n\r\n");
+                        }else{
+                            char *dir = strcat(www, parse_res->http_uri);
+                            if (parse_res->status_code==400){
+                                strcat(RESPONSE, "HTTP/1.1 400 Bad Request\r\n\r\n");
+                                readret += sizeof("HTTP/1.1 400 Bad Request\r\n\r\n");
+                            }else if (parse_res->status_code==404)
+                            {
+                                strcat(RESPONSE, "HTTP/1.1 404 Not found\r\n\r\n");
+                                readret += sizeof("HTTP/1.1 404 Not found\r\n\r\n");
+                            }else if (parse_res->status_code==505){
+                                strcat(RESPONSE, "HTTP/1.1 505 Bad version number\r\n\r\n");
+                                readret += sizeof("HTTP/1.1 505 Bad version number\r\n\r\n");
+                            // }else if (parse_res==408)
+                            // {
+                            //     memcpy(buf, Connection_Timeout_RESPONSE, sizeof(Connection_Timeout_RESPONSE));
+                            //     readret = sizeof(Connection_Timeout_RESPONSE);
+                            }else if (parse_res->status_code==501 || (strcmp(parse_res->method, "POST")==0 && parse_res->content_length==NULL)){
+                                strcat(RESPONSE, "HTTP/1.1 501 Method Unimplemented\r\n\r\n");
+                            }else if (parse_res->status_code==200){
+                                printf("%s%d\n", "parse.c content length: ", parse_res->content_length);
+                                    strcat(RESPONSE, "HTTP/1.1 200 OK\r\nConnection:");
+                                    readret += sizeof("HTTP/1.1 200 OK\r\nConnection:");
+                            }
+                            // printf("%s%s\n", "conn header", parse_res->conn_header);
+                            
 
-                    printf("buf to send %s\n", buf);
-                    printf("%s%d\n", "readret : ", readret);
+                            printf("buf to send %s\n", buf);
+                            printf("%s%d\n", "readret : ", readret);
+                            
+                            int sent_len = send(i, buf, readret, 0);
+                            printf("%s%d\n", "sent len", sent_len);
+                            if (sent_len != readret)
+                            {
+                                // printf("%s\n", "closing server sock");
+                                // close_socket(sock);
+                                close_socket(i);
+                                fprintf(stderr, "Error sending to client.\n");
+                                return EXIT_FAILURE;
+                            }
+                            if (parse_res && strcmp(parse_res->conn_header, "close")==0){
+                                if (close_socket(i)){
+                                    close_socket(sock);
+                                    fprintf(stderr, "Error closing client socket.\n");
+                                    return EXIT_FAILURE;
+                                }
+                            }
+                            memset(buf, 0, BUF_SIZE);
+                        }
                     
-                    int sent_len = send(i, buf, readret, 0);
-                    printf("%s%d\n", "sent len", sent_len);
-                    if (sent_len != readret)
-                    {
-                        // printf("%s\n", "closing server sock");
-                        // close_socket(sock);
-                        close_socket(i);
-                        fprintf(stderr, "Error sending to client.\n");
-                        return EXIT_FAILURE;
+                        // if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
+                        //     perror("asprintf");
+                        // } else {
+                        asprintf(&content_len, "%d", parse_res->content_length);
+                        strcat(RESPONSE, parse_res->conn_header);
+                        readret += sizeof(parse_res->conn_header);
+
+                        strcat(RESPONSE, "\r\nServer: Liso/1.0");
+                        readret += sizeof("\r\nServer: Liso/1.0");
+
+                        strcat(RESPONSE, "\r\nContent-Length:");
+                        readret += sizeof("\r\nContent-Length:");
+                        strcat(RESPONSE, content_len);
+                        readret += sizeof(content_len);
+
+                        struct stat attr;
+                        stat(i, &attr);
+                        strcat(RESPONSE, "\r\nLast-Modified: ");
+                        char *last_modified_time = ctime(&attr.st_mtim);
+                        strcat(RESPONSE, last_modified_time);
+                        readret += sizeof("\r\nDate: ")+sizeof(last_modified_time);
+
+                        time_t rawtime;
+                        struct tm *info;
+                        time(&rawtime);
+                        /* Get GMT time */
+                        info = gmtime(&rawtime);
+                        // day-name, day month year hour:minute:second GMT
+                        char *date;
+                        char *format = "%a, %d %b %Y %T GMT";
+                        // const struct tm *restrict timeptr;
+                        strftime(date, BUF_SIZE, format, info);
+                        readret += sizeof("\r\nDate: ")+sizeof(date);
+
+                        // text/html, text/css, image/png, image/jpeg, image/gif, etc
+                        char *content_type;
+                        char *suffix;
+                        suffix = get_file_ext(parse_res->http_uri);
+                        if (strcmp(suffix, ".html")==0){
+                            content_type = "text/html";
+                        }else if (strcmp(suffix, ".css")==0){
+                            content_type = "text/css";
+                        }else if (strcmp(suffix, ".png")==0){
+                            content_type = "image/png";
+                        }else if (strcmp(suffix, ".jpg")==0){
+                            content_type = "image/jpeg";
+                        }else if (strcmp(suffix, ".gif")==0){
+                            content_type = "image/gif";
+                        }
+                        strcat(RESPONSE, content_type);
+                        readret += sizeof(content_type);
+                        if (strcmp(parse_res->method, "HEAD")){
+                            char *content = open(i, O_RDONLY);
+                            strcat(RESPONSE, content);
+                            readret += content_len;
+                        }
+                        strcpy(buf, RESPONSE);
+                        strcpy(buf, "\r\n");
+                        strcpy(buf, "\r\n");
+                        printf("%s\n", buf);
+                        free(content_len);
                     }
-                    memset(buf, 0, BUF_SIZE);
-
-                    // if (close_socket(i))
-                    // {
-                    //     close_socket(sock);
-                    //     fprintf(stderr, "Error closing client socket.\n");
-                    //     return EXIT_FAILURE;
-                    // }
-
                 }
             }
         }
