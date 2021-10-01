@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include "parse.h"
+#include <errno.h>
 
 
 #define ECHO_PORT 9999
@@ -112,7 +113,7 @@ int main(int argc, char* argv[])
             perror("select error");
             return EXIT_FAILURE;
         };
-        char RESPONSE[150];
+        char RESPONSE[BUF_SIZE];
         // char BAD_REQUEST_RESPONSE[29] = "HTTP/1.1 400 Bad Request\r\n\r\n";
         // char NOT_FOUND_RESPONSE[27] = "HTTP/1.1 404 Not found\r\n\r\n";
         // char Connection_Timeout_RESPONSE[36] = "HTTP/1.1 408 Connection timeout\r\n\r\n";
@@ -144,20 +145,17 @@ int main(int argc, char* argv[])
                     if (readret <= 0)
                     {
                         if (readret==-1){
+                            printf("The last error message is: %s\n", strerror(errno));
                             fprintf(stderr, "Error reading from client socket.\n");
                             close_socket(i);
                             close_socket(sock);
+                            FD_CLR(i, &sockets);
                             return EXIT_FAILURE;
                         }
-                        // if (parse_res && strcmp(parse_res->conn_header, "close")==0){
-                        if (close_socket(i)){
-                            close_socket(sock);
-                            fprintf(stderr, "Error closing client socket.\n");
-                            return EXIT_FAILURE;
-                        }
-                        FD_CLR(i, &sockets);
                     }else{     
                         printf("buf to parse %s\n", buf);
+                        FILE *stream;
+                        stream = fopen(www, "r");
                         http_parser *parse_res = parse(buf, BUF_SIZE, i);
                         if (parse_res==NULL){
                             strcat(RESPONSE, "HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -167,7 +165,7 @@ int main(int argc, char* argv[])
                             if (parse_res->status_code==400){
                                 strcat(RESPONSE, "HTTP/1.1 400 Bad Request\r\n\r\n");
                                 readret += sizeof("HTTP/1.1 400 Bad Request\r\n\r\n");
-                            }else if (parse_res->status_code==404)
+                            }else if (parse_res->status_code==404 || (stream==NULL))
                             {
                                 strcat(RESPONSE, "HTTP/1.1 404 Not found\r\n\r\n");
                                 readret += sizeof("HTTP/1.1 404 Not found\r\n\r\n");
@@ -186,29 +184,7 @@ int main(int argc, char* argv[])
                                     readret += sizeof("HTTP/1.1 200 OK\r\nConnection:");
                             }
                             // printf("%s%s\n", "conn header", parse_res->conn_header);
-                            
-
-                            printf("buf to send %s\n", buf);
-                            printf("%s%d\n", "readret : ", readret);
-                            
-                            int sent_len = send(i, buf, readret, 0);
-                            printf("%s%d\n", "sent len", sent_len);
-                            if (sent_len != readret)
-                            {
-                                // printf("%s\n", "closing server sock");
-                                // close_socket(sock);
-                                close_socket(i);
-                                fprintf(stderr, "Error sending to client.\n");
-                                return EXIT_FAILURE;
-                            }
-                            if (parse_res && strcmp(parse_res->conn_header, "close")==0){
-                                if (close_socket(i)){
-                                    close_socket(sock);
-                                    fprintf(stderr, "Error closing client socket.\n");
-                                    return EXIT_FAILURE;
-                                }
-                            }
-                            memset(buf, 0, BUF_SIZE);
+                        
                         }
                     
                         // if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
@@ -224,14 +200,16 @@ int main(int argc, char* argv[])
                         strcat(RESPONSE, "\r\nContent-Length:");
                         readret += sizeof("\r\nContent-Length:");
                         strcat(RESPONSE, content_len);
+                        printf("%s %d\n", "readret without content :", readret);
                         readret += sizeof(content_len);
 
                         struct stat attr;
                         stat(i, &attr);
-                        strcat(RESPONSE, "\r\nLast-Modified: ");
+                        
                         char *last_modified_time = ctime(&attr.st_mtim);
+                        strcat(RESPONSE, "\r\nLast-Modified: ");
                         strcat(RESPONSE, last_modified_time);
-                        readret += sizeof("\r\nDate: ")+sizeof(last_modified_time);
+                        readret += sizeof("\r\nLast-Modified: ")+sizeof(last_modified_time);
 
                         time_t rawtime;
                         struct tm *info;
@@ -239,10 +217,12 @@ int main(int argc, char* argv[])
                         /* Get GMT time */
                         info = gmtime(&rawtime);
                         // day-name, day month year hour:minute:second GMT
-                        char *date;
+                        char date[BUF_SIZE];
                         char *format = "%a, %d %b %Y %T GMT";
                         // const struct tm *restrict timeptr;
                         strftime(date, BUF_SIZE, format, info);
+                        strcat(RESPONSE, "\r\nDate: ");
+                        strcat(RESPONSE, date);
                         readret += sizeof("\r\nDate: ")+sizeof(date);
 
                         // text/html, text/css, image/png, image/jpeg, image/gif, etc
@@ -260,18 +240,102 @@ int main(int argc, char* argv[])
                         }else if (strcmp(suffix, ".gif")==0){
                             content_type = "image/gif";
                         }
+
+                        strcat(RESPONSE, "\r\nContent-Type: ");
+                        readret += sizeof("\r\nContent-Type: ");
                         strcat(RESPONSE, content_type);
                         readret += sizeof(content_type);
-                        if (strcmp(parse_res->method, "HEAD")){
-                            char *content = open(i, O_RDONLY);
-                            strcat(RESPONSE, content);
-                            readret += content_len;
+                        strcat(RESPONSE, "\r\n\r\n");
+                        readret += sizeof("\r\n\r\n");
+                        // printf("%s %d\n", "readret with content :", readret);
+                        
+                        int sent_len;
+                        if (strcmp(parse_res->method, "HEAD")){ // not HEAD request
+
+                            // open(i, O_RDONLY);
+                            // char content[BUF_SIZE];
+                            char *content;
+                            // read(i, content, content_len);
+                            
+                            
+                            // fgets(content, BUF_SIZE, stream);
+                            content = gets(stream);
+                            printf("%s %s\n", "content:", content);
+                            content_len = sizeof(content);
+                            printf("%s %d\n", "content len:", content_len);
+                            // strcat(RESPONSE, "\r\nmessage-body");
+                            // readret += sizeof("\r\nmessage-body: ");
+                            if (content_len + readret <= BUF_SIZE){
+                                strcat(RESPONSE, content);
+                                readret += content_len;
+                                sent_len = send(i, RESPONSE, readret, 0);
+                                printf("%s", "here");
+                                if (sent_len != readret){
+                                    // printf("%s\n", "closing server sock");
+                                    // close_socket(sock);
+                                    close_socket(i);
+                                    fprintf(stderr, "Error sending to client.\n");
+                                    return EXIT_FAILURE;
+                                }
+                            }else{
+                                strcat(RESPONSE, content);
+                                readret += content_len;
+                                printf("response to send %s\n", RESPONSE);
+                                printf("%s%d\n", "readret : ", readret);
+                                while (readret > 0){
+                                    if (readret > BUF_SIZE){
+                                        sent_len = send(i, RESPONSE, BUF_SIZE, 0);
+                                        printf("%s\n", "heree");
+
+                                        if (sent_len != BUF_SIZE){
+                                            // printf("%s\n", "closing server sock");
+                                            // close_socket(sock);
+                                            close_socket(i);
+                                            fprintf(stderr, "Error sending to client.\n");
+                                            return EXIT_FAILURE;
+                                        }
+                                    }else{
+                                        sent_len = send(i, RESPONSE, readret, 0);
+                                        printf("%s", "hereee");
+                                        if (sent_len != readret){
+                                            // printf("%s\n", "closing server sock");
+                                            // close_socket(sock);
+                                            close_socket(i);
+                                            fprintf(stderr, "Error sending to client.\n");
+                                            return EXIT_FAILURE;
+                                        }
+                                    }
+                                    printf("%s%d\n", "sent len", sent_len);
+                            
+                                    readret -= BUF_SIZE;
+                                }
+                            }
+                        }else{  // HEAD request
+                            
+                            
+                            printf("response to send %s\n", RESPONSE);
+                            printf("%s%d\n", "readret : ", readret);
+                            sent_len = send(i, RESPONSE, readret, 0);
+                            if (sent_len != readret){
+                                // printf("%s\n", "closing server sock");
+                                // close_socket(sock);
+                                close_socket(i);
+                                fprintf(stderr, "Error sending to client.\n");
+                                return EXIT_FAILURE;
+                            }
                         }
-                        strcpy(buf, RESPONSE);
-                        strcpy(buf, "\r\n");
-                        strcpy(buf, "\r\n");
-                        printf("%s\n", buf);
-                        free(content_len);
+                        // free(content_len);
+                        
+                        
+                        
+                        if (parse_res && strcmp(parse_res->conn_header, "close")==0){
+                            if (close_socket(i)){
+                                close_socket(sock);
+                                fprintf(stderr, "Error closing client socket.\n");
+                                return EXIT_FAILURE;
+                            }
+                        }
+                        memset(buf, 0, BUF_SIZE);
                     }
                 }
             }
