@@ -126,6 +126,7 @@ int main(int argc, char* argv[])
         for (int i=0; i < FD_SETSIZE; i++){
             if (FD_ISSET(i, &sockets_to_process)){
                 if (i==sock){
+                    printf("%s\n", "accepting");
                     client_sock = accept(sock, (struct sockaddr *) &cli_addr, &cli_size);
                     if ((client_sock) == -1)
                     {
@@ -138,9 +139,18 @@ int main(int argc, char* argv[])
                     //     max_socket = client_sock;
                     // }
                 }else{
+                    struct timeval timeout;      
+                    timeout.tv_sec = 10;
+                    timeout.tv_usec = 0;
+                    
+                    if (setsockopt (i, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) < 0)
+                        error("setsockopt failed\n");
+
+                    if (setsockopt (i, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof timeout) < 0)
+                        error("setsockopt failed\n");
                     readret = 0;
                     char content_len;
-                    
+                    printf("%s\n", "receiving");
                     readret = recv(i, buf, BUF_SIZE, 0);
                     if (readret <= 0)
                     {
@@ -155,13 +165,13 @@ int main(int argc, char* argv[])
                     }else{     
                         printf("buf to parse %s\n", buf);
                         FILE *stream;
-                        stream = fopen(www, "r");
                         http_parser *parse_res = parse(buf, BUF_SIZE, i);
                         if (parse_res==NULL){
                             strcat(RESPONSE, "HTTP/1.1 400 Bad Request\r\n\r\n");
                             readret += sizeof("HTTP/1.1 400 Bad Request\r\n\r\n");
                         }else{
                             char *dir = strcat(www, parse_res->http_uri);
+                            stream = fopen(dir, "r");
                             if (parse_res->status_code==400){
                                 strcat(RESPONSE, "HTTP/1.1 400 Bad Request\r\n\r\n");
                                 readret += sizeof("HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -184,7 +194,6 @@ int main(int argc, char* argv[])
                                     readret += sizeof("HTTP/1.1 200 OK\r\nConnection:");
                             }
                             // printf("%s%s\n", "conn header", parse_res->conn_header);
-                        
                         }
                         printf("%s %d\n", "content len before asprintf:", parse_res->content_length);
                         // if (asprintf(&content_len, "%d", parse_res->content_length) == -1) {
@@ -254,65 +263,79 @@ int main(int argc, char* argv[])
                         int sent_len;
                         if (strcmp(parse_res->method, "HEAD")){ // not HEAD request
 
-                            // open(i, O_RDONLY);
-                            char content[BUF_SIZE];
-                            // read(i, content, content_len);
-                            
-                            
-                            fgets(content, BUF_SIZE, stream);
-                            printf("%s %s\n", "content:", content);
-                            content_len = sizeof(content);
+                            // open(i, O_RDONLY); read(i)
+                            if (stream){
+                                char content[parse_res->content_length];
+                                fgets(content, parse_res->content_length, stream);
+                                printf("%s %s\n", "content:", content);
+                                strcat(RESPONSE, content);
+                                readret += content_len;
+                                fclose(stream);
+                            }
+                            // content_len = sizeof(content);
                             
                             // strcat(RESPONSE, "\r\nmessage-body");
                             // readret += sizeof("\r\nmessage-body: ");
-                            if (content_len + readret <= BUF_SIZE){
-                                strcat(RESPONSE, content);
-                                readret += content_len;
-                                sent_len = send(i, RESPONSE, readret, 0);
-                                printf("%s", "here");
-                                if (sent_len != readret){
-                                    // printf("%s\n", "closing server sock");
-                                    // close_socket(sock);
-                                    close_socket(i);
-                                    fprintf(stderr, "Error sending to client.\n");
-                                    return EXIT_FAILURE;
-                                }
-                            }else{
-                                strcat(RESPONSE, content);
-                                readret += content_len;
-                                printf("response to send %s\n", RESPONSE);
-                                printf("%s%d\n", "readret : ", readret);
-                                while (readret > 0){
-                                    if (readret > BUF_SIZE){
-                                        sent_len = send(i, RESPONSE, BUF_SIZE, 0);
-                                        printf("%s\n", "heree");
+                            // if (content_len + readret <= BUF_SIZE){
+                            //     strcat(RESPONSE, content);
+                            //     readret += content_len;
+                            //     sent_len = send(i, RESPONSE, readret, 0);
+                            //     printf("%s", "here");
+                            //     if (sent_len != readret){
+                            //         // printf("%s\n", "closing server sock");
+                            //         // close_socket(sock);
+                            //         close_socket(i);
+                            //         fprintf(stderr, "Error sending to client.\n");
+                            //         return EXIT_FAILURE;
+                            //     }
+                            // }else{
+                            
+                            printf("response to send %s\n", RESPONSE);
+                            printf("%s%d\n", "readret : ", readret);
+                            sent_len = send(i, RESPONSE, readret, 0);
+                            printf("%s\n", "heree");
 
-                                        if (sent_len != BUF_SIZE){
-                                            // printf("%s\n", "closing server sock");
-                                            // close_socket(sock);
-                                            close_socket(i);
-                                            fprintf(stderr, "Error sending to client.\n");
-                                            return EXIT_FAILURE;
-                                        }
-                                    }else{
-                                        sent_len = send(i, RESPONSE, readret, 0);
-                                        printf("%s", "hereee");
-                                        if (sent_len != readret){
-                                            // printf("%s\n", "closing server sock");
-                                            // close_socket(sock);
-                                            close_socket(i);
-                                            fprintf(stderr, "Error sending to client.\n");
-                                            return EXIT_FAILURE;
-                                        }
-                                    }
-                                    printf("%s%d\n", "sent len", sent_len);
-                            
-                                    readret -= BUF_SIZE;
-                                }
+                            if (sent_len != readret){
+                                // printf("%s\n", "closing server sock");
+                                // close_socket(sock);
+                                close_socket(i);
+                                FD_CLR(i, &sockets);
+                                fprintf(stderr, "Error sending to client.\n");
+                                return EXIT_FAILURE;
                             }
+                                // while (readret > 0){
+                                //     if (readret > BUF_SIZE){
+                                //         sent_len = send(i, RESPONSE, BUF_SIZE, 0);
+                                //         printf("%s\n", "heree");
+
+                                //         if (sent_len != BUF_SIZE){
+                                //             // printf("%s\n", "closing server sock");
+                                //             // close_socket(sock);
+                                //             close_socket(i);
+                                //             fprintf(stderr, "Error sending to client.\n");
+                                //             return EXIT_FAILURE;
+                                //         }
+                                //     }else{
+                                //         sent_len = send(i, RESPONSE, readret, 0);
+                                //         printf("%s\n", "hereee");
+                                //         // printf("%s%d\n", "sent len", sent_len);
+                                //         // printf("%s%d\n", "readret", readret);
+                                //         printf("%s %d\n", "client sock", i);
+                                //         if (FD_ISSET(i, &sockets_to_process)){
+                                //             printf("%s\n", "client sock in set");
+                                //         }
+                                //         if (sent_len != readret){
+                                //             // printf("%s\n", "closing server sock");
+                                //             // close_socket(sock);
+                                //             close_socket(i);
+                                //             fprintf(stderr, "Error sending to client.\n");
+                                //             return EXIT_FAILURE;
+                                //         }
+                                //     }
+                                //     readret -= BUF_SIZE;
+                                // }
+                            // } 
                         }else{  // HEAD request
-                            
-                            
                             printf("response to send %s\n", RESPONSE);
                             printf("%s%d\n", "readret : ", readret);
                             sent_len = send(i, RESPONSE, readret, 0);
@@ -320,6 +343,7 @@ int main(int argc, char* argv[])
                                 // printf("%s\n", "closing server sock");
                                 // close_socket(sock);
                                 close_socket(i);
+                                FD_CLR(i, &sockets);
                                 fprintf(stderr, "Error sending to client.\n");
                                 return EXIT_FAILURE;
                             }
@@ -329,11 +353,13 @@ int main(int argc, char* argv[])
                         
                         
                         if (parse_res && strcmp(parse_res->conn_header, "close")==0){
+                            printf("%s\n", "hhere");
                             if (close_socket(i)){
                                 close_socket(sock);
                                 fprintf(stderr, "Error closing client socket.\n");
                                 return EXIT_FAILURE;
                             }
+                            FD_CLR(i, &sockets);
                         }
                         memset(buf, 0, BUF_SIZE);
                     }

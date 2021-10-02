@@ -224,9 +224,11 @@ request_line: token t_sp text t_sp text t_crlf {
 request_header: token ows t_colon ows text ows t_crlf {
 	YPRINTF("request_Header:\n%s\n%s\n",$1,$5);
     strcpy(parsing_request->headers[parsing_request->header_count].header_name, $1);
-	char *header_name = parsing_request->headers[parsing_request->header_count].header_name;
+	char header_name[12]; 
+	strcat(header_name, parsing_request->headers[parsing_request->header_count].header_name);
 	strcpy(parsing_request->headers[parsing_request->header_count].header_value, $5);
-	char *header_value = parsing_request->headers[parsing_request->header_count].header_value;
+	char header_value[4096]; 
+	strcat(header_value, parsing_request->headers[parsing_request->header_count].header_value);
 	if (strcmp(header_name, "Connection") == 0 || strcmp(header_name, "connection") == 0){
 		if (strcmp(header_value, "close")==0 || strcmp(header_value, "Close")==0){
 			parsing_request->conn_header = "close";
